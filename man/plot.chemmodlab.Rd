@@ -4,8 +4,14 @@
 \alias{plot.chemmodlab}
 \title{Plot method for the chemmodlab class.}
 \usage{
-\method{plot}{chemmodlab}(x, max.select = NA, splits = 1:x$nsplits,
-  meths = x$models, series = "both", ...)
+\method{plot}{chemmodlab}(
+  x,
+  max.select = NA,
+  splits = 1:x$nsplits,
+  meths = x$models,
+  series = "both",
+  ...
+)
 }
 \arguments{
 \item{x}{an object of class \code{\link{chemmodlab}}.}
@@ -69,6 +75,7 @@ There are two main series of plots generated:
  accumulation curves for each descriptor set is
  compared.
 }
+
 \examples{
 \dontrun{
 # A data set with  binary response and multiple descriptor sets
@@ -85,9 +92,6 @@ cml <- ModelTrain(USArrests, nsplits = 2, nfolds = 2,
 plot(cml)
 
 }
-\author{
-Jacqueline Hughes-Oliver, Jeremy Ash, Atina Brooks
-}
 \references{
 Modified from code originally written by
   William J. Welch 2001-2002
@@ -95,4 +99,6 @@ Modified from code originally written by
 \seealso{
 \code{\link{chemmodlab}}, \code{\link{ModelTrain}}
 }
-
+\author{
+Jacqueline Hughes-Oliver, Jeremy Ash, Atina Brooks
+}

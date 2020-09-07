@@ -4,8 +4,18 @@
 \alias{chemmodlab}
 \title{Constructor for the chemmodlab object}
 \usage{
-chemmodlab(all.preds, all.probs, model.acc, classify, responses, data, params,
-  des.names, models, nsplits)
+chemmodlab(
+  all.preds,
+  all.probs,
+  model.acc,
+  classify,
+  responses,
+  data,
+  params,
+  des.names,
+  models,
+  nsplits
+)
 }
 \arguments{
 \item{all.preds}{a list of lists of dataframes.  The elements of the outer
@@ -53,11 +63,10 @@ unspecified.}
 \description{
 Constructor for the chemmodlab object
 }
-\author{
-Jacqueline Hughes-Oliver, Jeremy Ash
-}
 \seealso{
 \code{\link{chemmodlab}}, \code{\link{plot.chemmodlab}},
   \code{\link{CombineSplits}},
 }
-
+\author{
+Jacqueline Hughes-Oliver, Jeremy Ash
+}

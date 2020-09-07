@@ -32,7 +32,7 @@ tunable model parameter, however users may set any parameter
 manually by generating a list with this function and assigning
 the parameters.
 
-See \url{https://jrash.github.io/chemmodlab/} for more information about the
+See \url{https://pages.github.ncsu.edu/jrash/chemmodlab/} for more information about the
 models available (including model default parameters).
 }
 \examples{
@@ -46,10 +46,9 @@ cml <- ModelTrain(USArrests, models = "RF", nsplits = 3,
 
 
 }
-\author{
-Jeremy Ash
-}
 \seealso{
 \code{\link{ModelTrain}}, \code{\link{chemmodlab}}
 }
-
+\author{
+Jeremy Ash
+}

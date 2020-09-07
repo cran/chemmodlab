@@ -48,6 +48,9 @@
 #' the list constructed by  \code{\link{MakeModelDefaults}}. One can construct
 #' a list of parameters using  \code{\link{MakeModelDefaults}} and then
 #' modify the parameters.
+#' @param verbose verbose mode or not?
+#' @param descriptors descriptor sets to compute
+#' @param mols molecule file created by rcdk
 #' @param ... Additional parameters.
 #'
 #' @return A list is returned of class \code{\link{chemmodlab}} containing:
@@ -159,6 +162,8 @@
 #' @import methods
 #' @import stats
 #' @import utils
+#' @import rcdk
+#' @import fingerprint
 #' 
 #' @export
 ModelTrain <- function(...) UseMethod("ModelTrain")
@@ -172,7 +177,7 @@ ModelTrain.default <- function(x, y,
                                des.names = NA,
                                models = c("NNet", "PLS", "LAR", "Lasso",
                                           "PLSLDA", "Tree", "SVM", "KNN", "RF"),
-                               user.params = NULL,
+                               user.params = NULL, verbose = FALSE,
                                ...) {
   
   s3method <- "default"
@@ -188,12 +193,83 @@ ModelTrain.default <- function(x, y,
     }
   }
   if (!is(y, "numeric")) stop("'y' must be a numeric vector")
+  
+  xcol.lengths <- c()
+  for (i in 1:length(x)) {
+    xcol.lengths <- c(xcol.lengths, ncol(x[[i]]))
+  }
+  
 
-  BackModelTrain(x = x, y = y,
-                 nfolds = nfolds, nsplits = nsplits, seed.in = seed.in, 
-                 des.names = des.names, models = models, user.params = user.params,
-                 s3method = s3method)
+  if (verbose) {
+    BackModelTrain(x = x, y = y, xcol.lengths = xcol.lengths,
+               nfolds = nfolds, nsplits = nsplits, seed.in = seed.in, 
+               des.names = des.names, models = models, user.params = user.params,
+               s3method = s3method, verbose = verbose)
+  } else {
+    suppressWarnings(BackModelTrain(x = x, y = y, xcol.lengths = xcol.lengths,
+             nfolds = nfolds, nsplits = nsplits, seed.in = seed.in, 
+             des.names = des.names, models = models, user.params = user.params,
+             s3method = s3method, verbose = verbose))
+  }
 }
+
+#' @describeIn ModelTrain S3 method for class 'character'
+#' @export
+ModelTrain.character <- function(descriptors, y, mols, 
+                                 nfolds = 10,
+                                 nsplits = 3,
+                                 seed.in = NA,
+                                 des.names = NA,
+                                 models = c("NNet", "PLS", "LAR", "Lasso",
+                                            "PLSLDA", "Tree", "SVM", "KNN", "RF"),
+                                 user.params = NULL, verbose = FALSE,
+                                 ...) {
+  
+  s3method <- "character"
+  if (class(mols[[1]]) != "jobjRef") {
+    stop("'mols' should be a molecule list produced by the package rcdk")
+  }
+  
+  if (!all(descriptors %in% c("hybrid", "constitutional", "topological",
+                         "electronic", "geometrical", "fp.standard",
+                         "fp.extended", "fp.graph", "fp.hybridization",
+                         "fp.maccs", "fp.estate", "fp.pubchem", "fp.kr",
+                         "fp.shortestpath", "fp.signature", "fp.circular"))) {
+    stop("'descriptors' should be a character vector containing descriptors computed by chemmodlab")
+  }
+  
+  desc.ls <- list()
+  for (i in 1:length(descriptors)) {
+    if(descriptors[i] %in% c("hybrid", "constitutional", "topological",
+                           "electronic", "geometrical")) {
+      desc.ls[[i]] <- eval.desc(mols, get.desc.names(descriptors[i]))
+    } else {
+      fp.type <- sub("fp.", "", descriptors[i])
+      fing <- lapply(mols, get.fingerprint, type = fp.type)
+      desc.ls[[i]] <- fp.to.matrix(fing)
+    }
+  }
+  
+  df <- matrix(y, ncol = 1)
+  xcol.lengths <- c()
+  for (i in 1:length(descriptors)) {
+    work.data <- as.matrix(desc.ls[[i]])
+    rm.desc <- apply(work.data, 2, function(x) all(is.na(x)) == T)
+    if (sum(rm.desc) > 0) {
+      if (verbose)
+        warning(paste("WARNING.....", sum(rm.desc),
+                      "descriptors could not be computed and were omitted"))
+      work.data <- subset(work.data, select = !rm.desc)
+    }
+    rm(rm.desc)
+    xcol.lengths <- c(xcol.lengths, ncol(work.data))
+    df<- cbind(df, work.data)
+  }
+  df <- as.data.frame(df)
+  
+  ModelTrain.data.frame(d = df, ids = F, xcol.lengths = xcol.lengths, verbose = verbose) 
+}
+
 
 #' @describeIn ModelTrain S3 method for class 'data.frame'
 #' @export
@@ -209,7 +285,7 @@ ModelTrain.data.frame <- function(d,
                             des.names = NA,
                             models = c("NNet", "PLS", "LAR", "Lasso",
                                        "PLSLDA", "Tree", "SVM", "KNN", "RF"),
-                            user.params = NULL,
+                            user.params = NULL, verbose = FALSE,
                             ...) {
   s3method <- "data.frame"
   # checking parameters specified correctly
@@ -269,18 +345,28 @@ ModelTrain.data.frame <- function(d,
       }
     }
   }
-  print(nfolds)
-  BackModelTrain(d = d, ids = ids, xcol.lengths = xcol.lengths, xcols = xcols,
-                 nfolds = nfolds, nsplits = nsplits, seed.in = seed.in, 
-                 des.names = des.names, models = models, user.params = user.params,
-                 s3method = s3method, idcol = idcol, ycol = ycol)
+  
+  # TODO There were still warning messages being produced, so I am just
+  # suppressing all warnings when in quiet mode
+  if (verbose) {
+    BackModelTrain(d = d, ids = ids, xcol.lengths = xcol.lengths, xcols = xcols,
+                   nfolds = nfolds, nsplits = nsplits, seed.in = seed.in, 
+                   des.names = des.names, models = models, user.params = user.params,
+                   s3method = s3method, idcol = idcol, ycol = ycol, verbose = verbose)
+  } else {
+    suppressWarnings(BackModelTrain(d = d, ids = ids, xcol.lengths = xcol.lengths, xcols = xcols,
+                   nfolds = nfolds, nsplits = nsplits, seed.in = seed.in, 
+                   des.names = des.names, models = models, user.params = user.params,
+                   s3method = s3method, idcol = idcol, ycol = ycol, verbose = verbose))
+  }
 }
 
 BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
                            xcol.lengths = NA, xcols = NA,
                            idcol = NA, ycol = NA, nfolds, nsplits, seed.in, 
-                           des.names, models, user.params, s3method) {
-  
+                           des.names, models, user.params, s3method,
+                           verbose = FALSE) {
+  rn <- rownames(d)
   if (s3method == "data.frame") {
     n.des <- length(xcols)
   } else {
@@ -313,7 +399,7 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
   } else {
     seed.in <- c()
     for (i in 1:nsplits) {
-      seed.in <- c(seed.in, as.numeric(paste(rep(i, 3), collapse = "")))
+      seed.in <- c(seed.in, as.numeric(paste(rep(i, 5), collapse = "")))
     }
   }
 
@@ -321,26 +407,9 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
   split.probs.ls <- list()
   split.model.acc.ls <- list()
   work.data.ls <- list()
-  
-  if (s3method == "data.frame") {
-    n.obs <- nrow(d)
-  } else {
-    n.obs <- length(y)
-  }
+  rm.rows <- c()
 
-  Funcs <- lsf.str()
   for(seed.idx in 1:length(seed.in)){
-
-    current.seed <- seed.in[seed.idx]
-
-    #-----Assign folds for nfolds-fold cross-validation
-    fold.id <- rep(NA, n.obs)
-    num.in.folds <- floor(n.obs/nfolds)
-    set.seed(current.seed)
-    for (id in 1:(nfolds - 1)) {
-      fold.id[sample((1:n.obs)[(is.na(fold.id))], num.in.folds, replace = FALSE)] <- id
-    }
-    fold.id[(1:n.obs)[(is.na(fold.id))]] <- nfolds
     
     # all.xcols <- c()
     # for(i in seq_along(xcols)) {
@@ -353,17 +422,38 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
     des.preds.ls <- list()
     des.probs.ls <- list()
     des.model.acc.ls <- list()
+    des.model.obj.ls <- list()
 
-    for (des.idx in 1:length(xcols)) {
-      model.acc.ls <- list()
+    for (des.idx in 1:n.des) {
+      
+      current.seed <- seed.in[seed.idx]
       
       # take response and current descriptor set columns
       if (s3method == "data.frame") {
-        work.data <- ReadInData(d, ycol, xcols[[des.idx]], idcol)[[1]]
+        if (verbose) {
+          rid.obj <- ReadInData(d, ycol, xcols[[des.idx]], idcol)
+        }
+        else {
+          suppressWarnings(rid.obj  <- ReadInData(d, ycol, xcols[[des.idx]], idcol))
+        }
+        work.data <- rid.obj[[1]]
+        rm.rows <- c(rm.rows, rid.obj[[3]])
       } else {
         work.data <- data.frame(y = y, x[[des.idx]])
       }
       n.pred <- ncol(work.data) - 1
+      n.obs <- nrow(work.data)
+    
+      #-----Assign folds for nfolds-fold cross-validation
+      fold.id <- rep(NA, n.obs)
+      num.in.folds <- floor(n.obs/nfolds)
+      set.seed(current.seed)
+      for (id in 1:(nfolds - 1)) {
+        fold.id[sample((1:n.obs)[(is.na(fold.id))], num.in.folds, replace = FALSE)] <- id
+      }
+      fold.id[(1:n.obs)[(is.na(fold.id))]] <- nfolds
+      
+      model.acc.ls <- list()
 
       #-----Determine if we have binary or continuous data
       # if sum == 0 then all of the response is either 0 or 1.  
@@ -400,7 +490,7 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       #### This section is calling the machine learning functions and saving the results.
       #### If results are succesfully returned, the predictions are appended to the
       #### prediction data frame
-
+      
       #-----'tree' method
       # dont use method if requested more than once?
       if (sum(models %in% "Tree") == 1) {
@@ -408,19 +498,27 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
         # get how much time the current process has used
         pt <- proc.time()
         # get the time that expression used
-        st <- system.time(tryCatch(work.results <- BackTree(work.data, n.obs,
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackTree(work.data, n.obs,
                                                             n.pred, nfolds, fold.id,
                                                             classify, current.seed,  
                                                             params),
                                    error = function(e) {
                                      warning(paste("WARNING...Tree not run:", e$message))
                                      work.results <- list()
-                                     }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackTree(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         PrintTime(pt, st)
         if (length(work.results) > 0) {
           all.preds <- data.frame(all.preds, Tree = work.results$pred)
           if (classify)
             all.probs <- data.frame(all.probs, Tree = work.results$prob)
+          model.acc.ls <- c(model.acc.ls, Tree = list(work.results$model.acc))
           model.acc.ls <- c(model.acc.ls, Tree = list(work.results$model.acc))
         }
       }
@@ -429,14 +527,21 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       if (sum(models %in% "RPart") == 1) {
         work.results <- list()
         pt <- proc.time()
-        st <- system.time(tryCatch(work.results <- BackRpart(work.data, n.obs,
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackRpart(work.data, n.obs,
                                                              n.pred, nfolds, fold.id,
                                                              classify, current.seed,
                                                              params),
                                    error = function(e) {
                                      warning(paste("WARNING...RPart not run:", e$message))
                                      work.results <- list()
-                                     }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackRpart(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         PrintTime(pt, st)
         if (length(work.results) > 0) {
           all.preds <- data.frame(all.preds, RPart = work.results$pred)
@@ -450,14 +555,21 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       if (sum(models %in% "RF") == 1) {
         work.results <- list()
         pt <- proc.time()
-        st <- system.time(tryCatch(work.results <- BackRf(work.data, n.obs,
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackRf(work.data, n.obs,
                                                           n.pred, nfolds, fold.id,
                                                           classify, current.seed,  
                                                           params),
                                    error = function(e) {
                                      warning(paste("WARNING...RF not run:", e$message))
                                      work.results <- list()
-                                     }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackRf(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         PrintTime(pt, st)
         if (length(work.results) > 0) {
           all.preds <- data.frame(all.preds, RF = work.results$pred)
@@ -471,14 +583,22 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       if (sum(models %in% "SVM") == 1) {
         work.results <- list()
         pt <- proc.time()
-        st <- system.time(tryCatch(work.results <- BackSvm(work.data, n.obs,
+        # TODO you can do this verbose check more simply
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackSvm(work.data, n.obs,
                                                            n.pred, nfolds, fold.id,
                                                            classify, current.seed,  
                                                            params),
                                    error = function(e) {
                                      warning(paste("WARNING...SVM not run:", e$message))
                                      work.results <- list()
-                                     }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackSvm(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         PrintTime(pt, st)
         if (length(work.results) > 0) {
           all.preds <- data.frame(all.preds, SVM = work.results$pred)
@@ -492,14 +612,21 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       if (sum(models %in% "NNet") == 1) {
         work.results <- list()
         pt <- proc.time()
-        st <- system.time(tryCatch(work.results <- BackNnet(work.data, n.obs,
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackNnet(work.data, n.obs,
                                                             n.pred, nfolds, fold.id,
                                                             classify, current.seed,  
                                                             params),
                                    error = function(e) {
                                      warning(paste("WARNING...NNet not run:", e$message))
                                      work.results <- list()
-                                     }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackNnet(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         PrintTime(pt, st)
         if (length(work.results) > 0) {
           all.preds <- data.frame(all.preds, NNet = work.results$pred)
@@ -513,14 +640,21 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       if (sum(models %in% "KNN") == 1) {
         work.results <- list()
         pt <- proc.time()
-        st <- system.time(tryCatch(work.results <- BackKnn(work.data, n.obs, n.pred,
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackKnn(work.data, n.obs, n.pred,
                                                            nfolds, fold.id, classify,
                                                            current.seed,   
                                                            params),
                                   error = function(e) {
                                     warning(paste("WARNING...KNN not run:", e$message))
                                     work.results <- list()
-                                  }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackKnn(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         PrintTime(pt, st)
         if (length(work.results) > 0) {
           all.preds <- data.frame(all.preds, KNN = work.results$pred)
@@ -534,14 +668,21 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       if ((sum(models %in% "PLSLDA") == 1) && (classify)) {
         work.results <- list()
         pt <- proc.time()
-        st <- system.time(tryCatch(work.results <- BackPlsLdaNew(work.data,
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackPlsLdaNew(work.data,
                                                                  n.obs, n.pred, nfolds,
                                                                  fold.id, classify,
                                                                  current.seed),
                                    error = function(e) {
                                      warning(paste("WARNING...PLSLDA not run:", e$message))
                                      work.results <- list()
-                                   }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackPlsLdaNew(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         PrintTime(pt, st)
         if (length(work.results) > 0) {
           all.preds <- data.frame(all.preds, PLSLDA = work.results$pred)
@@ -555,7 +696,8 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       if (sum(models %in% "LAR") == 1) {
         work.results <- list()
         pt <- proc.time()
-        st <- system.time(tryCatch(work.results <- BackLars(work.data, n.obs,
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackLars(work.data, n.obs,
                                                             n.pred, nfolds, fold.id,
                                                             classify,
                                                             current.seed,   
@@ -563,7 +705,13 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
                                    error = function(e) {
                                      warning(paste("WARNING...LAR not run:", e$message))
                                      work.results <- list()
-                                     }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackLars(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         PrintTime(pt, st)
         if (length(work.results) > 0) {
           all.preds <- data.frame(all.preds, LAR = work.results$pred)
@@ -575,14 +723,21 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       if (sum(models %in% "Ridge") == 1) {
         work.results <- list()
         pt <- proc.time()
-        st <- system.time(tryCatch(work.results <- BackRidge(work.data, n.obs,
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackRidge(work.data, n.obs,
                                                              n.pred, nfolds, fold.id,
                                                              classify, current.seed,
                                                              params),
                                    error = function(e) {
                                      warning(paste("WARNING...Ridge not run:", e$message))
                                      work.results <- list()
-                                     }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackRidge(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         PrintTime(pt, st)
         if (length(work.results) > 0) {
           all.preds <- data.frame(all.preds, Ridge = work.results$pred)
@@ -594,14 +749,21 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       if (sum(models %in% "Lasso") == 1) {
         work.results <- list()
         pt <- proc.time()
-        st <- system.time(tryCatch(work.results <- BackLasso(work.data, n.obs,
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackLasso(work.data, n.obs,
                                                              n.pred, nfolds, fold.id,
                                                              classify, current.seed,
                                                              params),
                                    error = function(e) {
                                      warning(paste("WARNING...Lasso not run:", e$message))
                                      work.results <- list()
-                                   }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackLasso(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         PrintTime(pt, st)
         if (length(work.results) > 0) {
           all.preds <- data.frame(all.preds, Lasso = work.results$pred)
@@ -633,14 +795,21 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       if (sum(models %in% "ENet") == 1) {
         work.results <- list()
         pt <- proc.time()
-        st <- system.time(tryCatch(work.results <- BackEnet(work.data, n.obs,
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackEnet(work.data, n.obs,
                                                             n.pred, nfolds, fold.id,
                                                             classify, current.seed,  
                                                             params),
                                    error = function(e) {
                                      warning(paste("WARNING...ENet not run:", e$message))
                                      work.results <- list()
-                                     }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackEnet(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         PrintTime(pt, st)
         if (length(work.results) > 0) {
           all.preds <- data.frame(all.preds, ENet = work.results$pred)
@@ -652,14 +821,21 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       if (sum(models %in% "PCR") == 1) {
         work.results <- list()
         pt <- proc.time()
-        st <- system.time(tryCatch(work.results <- BackPcr(work.data, n.obs,
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackPcr(work.data, n.obs,
                                                            n.pred, nfolds, fold.id,
                                                            classify, current.seed,  
                                                            params),
                                    error = function(e) {
                                      warning(paste("WARNING...PCR not run:", e$message))
                                      work.results <- list()
-                                     }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackPcr(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         PrintTime(pt, st)
         if (length(work.results) > 0) {
           all.preds <- data.frame(all.preds, PCR = work.results$pred)
@@ -671,14 +847,21 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       if (sum(models %in% "PLS") == 1) {
         work.results <- list()
         pt <- proc.time()
-        st <- system.time(tryCatch(work.results <- BackPlsR(work.data, n.obs,
+        if (verbose) {
+          st <- system.time(tryCatch(work.results <- BackPlsR(work.data, n.obs,
                                                             n.pred, nfolds, fold.id,
                                                             classify, current.seed,  
                                                             params),
                                    error = function(e) {
                                      warning(paste("WARNING...PLS not run:", e$message))
                                      work.results <- list()
-                                     }))
+                                       }))
+        } else {
+          st <- system.time(tryCatch(work.results <- BackPlsR(work.data, n.obs,
+                                                    n.pred, nfolds, fold.id,
+                                                    classify, current.seed,  
+                                                    params), error=function(e){}))
+        }
         # why saving empty list to work.results replace output.to.log with warning()
         PrintTime(pt, st)
         if (length(work.results) > 0) {
@@ -706,9 +889,10 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
       rownames(all.preds) <- IDS
       des.preds.ls <- c(des.preds.ls, list(all.preds))
       des.model.acc.ls <- c(des.model.acc.ls, list(model.acc.ls))
-      if (seed.idx == 1)
+      if (seed.idx == 1) {
         work.data.ls <- c(work.data.ls,
                           list(work.data[, colnames(work.data) != "y"]))
+      }
     }
     names(des.preds.ls) <- des.names
     names(des.model.acc.ls) <- des.names
@@ -719,11 +903,31 @@ BackModelTrain <- function(x = NA, y = NA, d = NA, ids = NA,
     if (classify)
       split.probs.ls <- c(split.probs.ls, list(des.probs.ls))
   }
+  
+  # Remove missing observations in all descriptor sets
+  # print(rm.rows)
+  if(length(rm.rows) > 0) {
+    rm.rows <- unique(rm.rows)
+    rm.rows.rn <- rn[rm.rows]
+    for(seed.idx in 1:length(seed.in)){
+      for (des.idx in 1:n.des) {
+        work.data.rn <- rownames(split.preds.ls[[seed.idx]][[des.idx]])
+        split.preds.ls[[seed.idx]][[des.idx]] <- split.preds.ls[[seed.idx]][[des.idx]][!work.data.rn %in% rm.rows.rn, ]
+        if (classify)
+          split.prob.ls[[seed.idx]][[des.idx]] <- split.prob.ls[[seed.idx]][[des.idx]][!work.data.rn %in% rm.rows.rn, ]
+      }
+    }
+    y <- work.data$y[!work.data.rn %in% rm.rows.rn]
+    } else {
+      y <- work.data$y
+    }
 
   cml.result <- chemmodlab(split.preds.ls, split.probs.ls, split.model.acc.ls,
-                           classify, work.data$y, work.data.ls, params, des.names,
+                           classify, y, work.data.ls, params, des.names,
                            models, nsplits)
 
   return(cml.result)
 }
+
+
 
