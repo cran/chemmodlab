@@ -2,8 +2,8 @@ Package: chemmodlab
 Type: Package
 Title: A Cheminformatics Modeling Laboratory for Fitting and Assessing
         Machine Learning Models
-Version: 1.1.0
-Date: 2020-09-06
+Version: 2.0.0
+Date: 2022-05-01
 Authors@R: c(
     person("Jacqueline", "Hughes-Oliver", email = "hughesol@ncsu.edu", role = c("aut")),
     person("Jeremy", "Ash", email = "jrash@ncsu.edu", role = c("aut", "cre")), 
@@ -23,7 +23,7 @@ License: GPL-3
 LazyData: TRUE
 URL: https://github.com/jrash/ChemModLab
 BugReports: https://github.com/jrash/ChemModLab/issues
-Imports: fingerprint, rcdk, MSQC, class (>= 7.3.14), e1071 (>= 1.6.7),
+Imports: KernSmooth, MSQC, class (>= 7.3.14), e1071 (>= 1.6.7),
         elasticnet (>= 1.1), lars(>= 1.2), MASS(>= 7.3.45), nnet(>=
         7.3.12), pROC(>= 1.8), randomForest(>= 4.6.12), rpart(>=
         4.1.10), tree (>= 1.0.37), pls (>= 2.5.0), caret (>= 6.0-71),
@@ -34,8 +34,8 @@ Author: Jacqueline Hughes-Oliver [aut],
   Jeremy Ash [aut, cre],
   Atina Brooks [aut]
 Maintainer: Jeremy Ash <jrash@ncsu.edu>
-Suggests: knitr, rmarkdown
+Suggests: knitr, rmarkdown, testthat, vdiffr (>= 0.3.0)
 Encoding: UTF-8
-Packaged: 2020-09-07 02:47:49 UTC; Jeremy Ash Local
+Packaged: 2022-05-01 20:30:29 UTC; Jeremy Ash Local
 Repository: CRAN
-Date/Publication: 2020-09-07 10:00:02 UTC
+Date/Publication: 2022-05-01 23:30:02 UTC
